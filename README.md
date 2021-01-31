@@ -92,3 +92,7 @@ TODO
 - eject infra from aarts-cli
 
 - update tests
+
+#on lerna/building/publishing
+https://github.com/lerna/lerna/issues/1934
+https://github.com/lerna/lerna/issues/1282
