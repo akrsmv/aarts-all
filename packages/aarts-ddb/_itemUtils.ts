@@ -21,9 +21,9 @@ export const getItems = async <T extends DynamoItem>(params: ItemQueryParams)
         const refKeysConfig = (((global.domainAdapter.lookupItems as unknown) as Map<string, MixinConstructor<typeof DynamoItem>>).get(params.__type)?.__refkeys as Map<string, RefKey<Record<string, any>>>);
         const refKeyConfig = refKeysConfig.get(params.itemProp) as RefKey<any>
         !process.env.DEBUGGER || loginfo({ ringToken: params.ringToken }, `getItems: ref keys config for this __type (${params.__type}) `, ppjson(refKeysConfig))
-        !process.env.DEBUGGER || loginfo({ ringToken: params.ringToken }, `getItems: ref key config for this refkey (${params.itemProp}) `, ppjson(refKeysConfig.get(params.itemProp)))
+        !process.env.DEBUGGER || loginfo({ ringToken: params.ringToken }, `getItems: ref key config for this refkey (${params.__type}/${params.itemProp}) `, ppjson(refKeysConfig.get(params.itemProp)))
         const gsiKey = refKeyConfig.gsiKey as string[]
-        return ((await queryItems({
+        return await queryItems({
             ddbIndex: `${gsiKey[0]}__smetadata`,
             pk: params.itemPropValue,
             range: `${params.__type}|${params.state}`,
@@ -33,17 +33,17 @@ export const getItems = async <T extends DynamoItem>(params: ItemQueryParams)
             peersPropsToLoad: params.peersPropsToLoad,
             loadPeersLevel: params.loadPeersLevel,
             projectionExpression: params.projectionExpression
-        })));
+        });
     } else if (!!params.__type) {
-        return ((await queryItems({
+        return await queryItems({
             ddbIndex: 'smetadata__',
             pk: `${params.__type}|${params.state}`,
             primaryKeyName: 'smetadata__',
             rangeKeyName: '',
             ringToken: params.ringToken
-        })));
+        });
     }
-    else return { items:[] }
+    else return { items: [] }
 }
 
 export const getItemById = async <T extends DynamoItem>(__type: string, ref: string, ringToken: string): Promise<T | null> => {
@@ -76,7 +76,7 @@ export const getItemById = async <T extends DynamoItem>(__type: string, ref: str
  * @param errorsArray optional string array where explanatory error message woould be pushed
  */
 export const setDomainRefkeyFromPayload = async (__type: string, payload: DomainItem, domainRefkey: string, targetDomainRefkey: string, ringToken: string, errorsArray?: string[] | undefined): Promise<boolean> => {
-    !process.env.DEBUGGER || loginfo({ ringToken }, `entering setDomainRefkeyFromPayload with params`, ppjson({ __type, payload, domainRefkey, ringToken, targetDomainRefkey }))
+    !process.env.DEBUGGER || loginfo({ ringToken }, `entering setDomainRefkeyFromPayload with params`, ppjson({ __type, payload, domainRefkey, targetDomainRefkey, ringToken, errorsArray }))
     !process.env.DEBUGGER || loginfo({ ringToken }, `data model's ref key config is `, ppjson(global.domainAdapter.lookupItems))
     if (!!payload[domainRefkey]) {
         const itemByIdResults = await getItemById(__type, payload[domainRefkey], ringToken)
@@ -84,23 +84,22 @@ export const setDomainRefkeyFromPayload = async (__type: string, payload: Domain
             payload[domainRefkey] = itemByIdResults.id
             return true
         } else {
-            const refKeysConfig = (((global.domainAdapter.lookupItems as unknown) as Map<string, MixinConstructor<typeof DynamoItem>>).get(__type)?.__refkeys as Map<string, RefKey<Record<string, any>>>);
-            !process.env.DEBUGGER || loginfo({ ringToken }, `ref keys config for this __type (${__type}) `, ppjson(refKeysConfig))
-            const refKeyConfig = refKeysConfig.get(targetDomainRefkey) as RefKey<any>
-            !process.env.DEBUGGER || loginfo({ ringToken }, `ref key config for this refkey (${targetDomainRefkey}) `, ppjson(refKeysConfig.get(targetDomainRefkey)))
-            if (refKeyConfig.unique) {
-                const gsiKey = refKeyConfig.gsiKey as string[]
-                const itemByTargetRefkeyResults = await getItems({__type, ringToken, state: '', itemPropValue: payload[domainRefkey], itemProp: domainRefkey})
-                if (itemByTargetRefkeyResults.items.length === 1) {
-                    payload[domainRefkey] = itemByTargetRefkeyResults.items[0].id
-                    return true
-                } else if (itemByTargetRefkeyResults.items.length > 1) {
-                    !process.env.DEBUGGER || loginfo({ ringToken }, `[Refkey set] failed, because no target was found by id, and provided value '${payload[domainRefkey]}' for '${__type}''s refkey '${targetDomainRefkey}'('${gsiKey[0]}') points to multiple items and cannot take decision`)
-                    errorsArray && Array.isArray(errorsArray) && errorsArray.push(`[Refkey set] failed, because no target was found by id, and provided value '${payload[domainRefkey]}' for '${__type}''s refkey '${targetDomainRefkey}'('${gsiKey[0]}') points to multiple items and cannot take decision`)
-                } else if (itemByTargetRefkeyResults.items.length === 0) {
-                    !process.env.DEBUGGER || loginfo({ ringToken }, `[Refkey set] failed, because no target was found by id, and provided value '${payload[domainRefkey]}' for '${__type}''s refkey '${targetDomainRefkey}'('${gsiKey[0]}') was not found`)
-                    errorsArray && Array.isArray(errorsArray) && errorsArray.push(`[Refkey set] failed, because no target was found by id, and provided value '${payload[domainRefkey]}' for '${__type}''s refkey '${targetDomainRefkey}'('${gsiKey[0]}') was not found`)
-                }
+            const itemByTargetRefkeyResults = await getItems({ __type, ringToken, state: '', itemPropValue: payload[domainRefkey], itemProp: targetDomainRefkey })
+            if (itemByTargetRefkeyResults.items.length === 1) {
+                payload[domainRefkey] = itemByTargetRefkeyResults.items[0].id
+                return true
+            } else if (itemByTargetRefkeyResults.items.length > 1) {
+                const refKeysConfig = (((global.domainAdapter.lookupItems as unknown) as Map<string, MixinConstructor<typeof DynamoItem>>).get(__type)?.__refkeys as Map<string, RefKey<Record<string, any>>>);
+                const refKeyConfig = refKeysConfig.get(targetDomainRefkey) as RefKey<any>
+                const gsiKey = refKeyConfig && refKeyConfig.gsiKey as string[]
+                !process.env.DEBUGGER || loginfo({ ringToken }, `[Refkey set] failed, because no target was found by id, and provided value '${payload[domainRefkey]}' for '${__type}''s refkey '${targetDomainRefkey}'('${gsiKey[0]}') points to multiple items and cannot take decision`)
+                errorsArray && Array.isArray(errorsArray) && errorsArray.push(`[Refkey set] failed, because no target was found by id, and provided value '${payload[domainRefkey]}' for '${__type}''s refkey '${targetDomainRefkey}'('${Array.isArray(gsiKey) ? gsiKey[0] : undefined}') points to multiple items and cannot take decision`)
+            } else if (itemByTargetRefkeyResults.items.length === 0) {
+                const refKeysConfig = (((global.domainAdapter.lookupItems as unknown) as Map<string, MixinConstructor<typeof DynamoItem>>).get(__type)?.__refkeys as Map<string, RefKey<Record<string, any>>>);
+                const refKeyConfig = refKeysConfig.get(targetDomainRefkey) as RefKey<any>
+                const gsiKey = refKeyConfig && refKeyConfig.gsiKey as string[]
+                !process.env.DEBUGGER || loginfo({ ringToken }, `[Refkey set] failed, because no target was found by id, and provided value '${payload[domainRefkey]}' for '${__type}''s refkey '${targetDomainRefkey}'('${gsiKey[0]}') was not found`)
+                errorsArray && Array.isArray(errorsArray) && errorsArray.push(`[Refkey set] failed, because no target was found by id, and provided value '${payload[domainRefkey]}' for '${__type}''s refkey '${targetDomainRefkey}'('${Array.isArray(gsiKey) ? gsiKey[0] : undefined}') was not found`)
             }
         }
     }
