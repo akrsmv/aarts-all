@@ -34,7 +34,7 @@
     "aarts-item-manager": "^0.4.626",
     "aarts-types": "^0.2.624",
     "aarts-utils": "^0.2.619",
-    "aws-sdk": "^2.787.0",
+    "aws-sdk": "^2.814.0",
     "typescript": "^3.9.7"
   },
   "devDependencies": {}
