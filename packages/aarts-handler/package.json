@@ -7,7 +7,7 @@
   "dependencies": {
     "@types/aws-lambda": "^8.10.71",
     "@types/node": "^13.13.40",
-    "@types/request": "^2.48.4",
+    "@types/request": "^2.48.8",
     "aarts-types": "^0.2.828",
     "aarts-utils": "^0.2.817",
     "aws-sdk": "^2.831.0"
