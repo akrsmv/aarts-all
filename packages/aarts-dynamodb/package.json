@@ -24,7 +24,7 @@
     "aarts-types": "^0.2.752",
     "aarts-utils": "^0.2.745",
     "aws-lambda": "^1.0.6",
-    "aws-sdk": "^2.813.0",
+    "aws-sdk": "^2.1354.0",
     "typescript": "^3.9.7"
   },
   "devDependencies": {
